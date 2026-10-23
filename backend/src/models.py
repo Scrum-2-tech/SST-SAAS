@@ -67,6 +67,32 @@ class FileStatus(str, enum.Enum):
     SIN_VENCIMIENTO = "Sin Vencimiento"  # Archivos sin expiration_date definido.
 
 
+class SstAuditStatus(str, enum.Enum):
+    """Estado del ciclo de vida de una auditoría interna del SG-SST."""
+
+    PLANIFICADA = "Planificada"
+    EN_PROCESO = "En Proceso"
+    CERRADA = "Cerrada"
+
+
+class FindingType(str, enum.Enum):
+    """Clasificación de un hallazgo de auditoría SST (ISO 19011 / Dec. 1072)."""
+
+    CONFORMIDAD = "Conformidad"
+    NO_CONFORMIDAD_MAYOR = "No Conformidad Mayor"
+    NO_CONFORMIDAD_MENOR = "No Conformidad Menor"
+    OBSERVACION = "Observación"
+    OPORTUNIDAD_MEJORA = "Oportunidad de Mejora"
+
+
+class FindingStatus(str, enum.Enum):
+    """Estado del plan de acción asociado a un hallazgo."""
+
+    ABIERTO = "Abierto"
+    EN_PROGRESO = "En Progreso"
+    CERRADO = "Cerrado"
+
+
 # Umbral (en días) a partir del cual un documento se considera "Por Vencer".
 DIAS_ALERTA_VENCIMIENTO = 30
 
@@ -380,3 +406,107 @@ class AuditLog(Base):
 
     def __repr__(self) -> str:
         return f"<AuditLog id={self.id} action={self.action!r} user_id={self.user_id}>"
+
+
+# ---------------------------------------------------------------------------
+# Entidad: SstAudit (Auditoría INTERNA del SG-SST - negocio de SST)
+# ---------------------------------------------------------------------------
+class SstAudit(Base):
+    """Auditoría interna al Sistema de Gestión de SST.
+
+    NO confundir con AuditLog (trazabilidad técnica). Esta entidad modela el
+    proceso de AUDITORÍA que exige el Decreto 1072 de 2015 y los Estándares
+    Mínimos (Res. 0312 de 2019): una revisión planificada del SG-SST con sus
+    hallazgos y planes de acción.
+
+    Aislamiento multi-tenant: siempre pertenece a una Company (company_id).
+    """
+
+    __tablename__ = "sst_audits"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    scope: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # alcance
+    auditor: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    scheduled_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    status: Mapped[SstAuditStatus] = mapped_column(
+        SAEnum(SstAuditStatus, name="sst_audit_status_enum"),
+        nullable=False,
+        default=SstAuditStatus.PLANIFICADA,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    # Relaciones.
+    company: Mapped["Company"] = relationship()
+    findings: Mapped[list["SstFinding"]] = relationship(
+        back_populates="audit",
+        cascade="all, delete-orphan",
+    )
+
+    def __repr__(self) -> str:
+        return f"<SstAudit id={self.id} title={self.title!r} status={self.status.value}>"
+
+
+# ---------------------------------------------------------------------------
+# Entidad: SstFinding (Hallazgo de una auditoría SG-SST)
+# ---------------------------------------------------------------------------
+class SstFinding(Base):
+    """Hallazgo detectado durante una auditoría interna del SG-SST.
+
+    Cada hallazgo se clasifica (conformidad, no conformidad mayor/menor,
+    observación, oportunidad de mejora) y lleva un plan de acción con su
+    responsable, fecha límite y estado de cierre.
+    """
+
+    __tablename__ = "sst_findings"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    audit_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("sst_audits.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    finding_type: Mapped[FindingType] = mapped_column(
+        SAEnum(FindingType, name="sst_finding_type_enum"),
+        nullable=False,
+        default=FindingType.OBSERVACION,
+    )
+    action_plan: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    responsible: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    status: Mapped[FindingStatus] = mapped_column(
+        SAEnum(FindingStatus, name="sst_finding_status_enum"),
+        nullable=False,
+        default=FindingStatus.ABIERTO,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    # Relaciones.
+    audit: Mapped["SstAudit"] = relationship(back_populates="findings")
+
+    def __repr__(self) -> str:
+        return f"<SstFinding id={self.id} type={self.finding_type.value} status={self.status.value}>"

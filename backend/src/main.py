@@ -18,7 +18,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.routers import audit, auth, companies, files, folders
+from src.routers import audit, auth, companies, files, folders, sst_audits
 
 # ---------------------------------------------------------------------------
 # Instancia de la aplicación
@@ -57,6 +57,7 @@ app.include_router(companies.router)
 app.include_router(folders.router)
 app.include_router(files.router)
 app.include_router(audit.router)
+app.include_router(sst_audits.router)
 
 
 # ---------------------------------------------------------------------------

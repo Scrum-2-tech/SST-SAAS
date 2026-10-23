@@ -16,11 +16,27 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.database import get_db
+from src.dependencies import get_current_user
 from src.models import User, UserRole
 from src.schemas import Token, UserOut, UserRegister
 from src.security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
+
+
+@router.get(
+    "/me",
+    response_model=UserOut,
+    summary="Devuelve el usuario autenticado (identidad y rol)",
+)
+def read_current_user(current_user: User = Depends(get_current_user)) -> User:
+    """Devuelve los datos del usuario del token actual.
+
+    El frontend lo usa para conocer el ROL del usuario y decidir qué
+    secciones mostrar (ej. la Trazabilidad solo es visible para Gestor y
+    SuperAdmin). No expone nunca el password_hash (ver UserOut).
+    """
+    return current_user
 
 
 @router.post(

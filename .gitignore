@@ -1,0 +1,23 @@
+# ===== Python / Backend =====
+backend/.venv/
+backend/storage/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+
+# ===== Node / Frontend =====
+frontend/node_modules/
+frontend/dist/
+
+# ===== Variables de entorno (NUNCA subir secretos reales) =====
+.env
+**/.env
+# Sí se suben los ejemplos:
+!**/.env.example
+
+# ===== Sistema / Editor =====
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
