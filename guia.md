@@ -1,92 +1,279 @@
-# 🚀 Manual de Arranque Doméstico y Plan de Despliegue Comercial — SST-SAAS
+# 🚀 SST SaaS — Guía de Arranque y Presentación
 
-Este documento contiene las instrucciones precisas para replicar el entorno de desarrollo en cualquier computadora (como tu casa), el flujo de pruebas sugerido para la demostración de venta y la estrategia de infraestructura para subir el sistema a servidores en la nube.
+Manual completo para levantar el proyecto **desde cero en una máquina limpia** (Windows),
+probarlo y presentarlo. Pensado para que cualquiera del equipo lo encienda sin ayuda.
+
+> **Stack real del proyecto**
+>
+> - **Backend:** Python + FastAPI + SQLAlchemy 2.0
+> - **Base de datos:** PostgreSQL (en Docker)
+> - **Frontend:** React 18 + Vite + Tailwind CSS
+> - **Autenticación:** JWT (Bearer) + multi-tenant por header `X-Company-Id`
 
 ---
 
-## 🏠 1. Guía de Arranque Rápido al Llegar a Casa (Hoy mismo)
+## 📦 0. Programas que hay que instalar (máquina vacía)
 
-Cuando descargues el código en tu computadora personal, el entorno estará totalmente limpio. Sigue estos pasos en orden para encender todo el ecosistema en menos de 5 minutos:
+Instala estos cuatro antes de empezar. Enlaces oficiales:
 
-### Paso A: Clonar el Proyecto y Levantar Docker
-1. Abre tu terminal (PowerShell o CMD) y descarga tu código:
-   ```bash
-   git clone https://github.com
-   cd SST-SAAS
-   ```
-2. Asegúrate de tener **Docker Desktop** abierto y ejecutándose en tu barra de tareas.
-3. Levanta el contenedor de la base de datos de PostgreSQL en segundo plano:
-   ```bash
+| Programa              | Para qué                           | Dónde                                           |
+| --------------------- | ---------------------------------- | ----------------------------------------------- |
+| **Git**               | Descargar el código                | https://git-scm.com/downloads                   |
+| **Docker Desktop**    | Correr la base de datos PostgreSQL | https://www.docker.com/products/docker-desktop/ |
+| **Node.js 18+ (LTS)** | Correr el frontend (incluye `npm`) | https://nodejs.org/                             |
+| **Python 3.11+**      | Correr el backend                  | https://www.python.org/downloads/               |
+
+> Al instalar **Python**, marca la casilla **"Add Python to PATH"**.
+> Al instalar **Node.js**, deja todas las opciones por defecto.
+> Reinicia la terminal (o el PC) después de instalar, para que reconozca los comandos.
+
+### Verifica que quedaron instalados
+
+Abre una terminal nueva (PowerShell) y corre:
+
+```powershell
+git --version
+docker --version
+node --version
+python --version
+```
+
+Si cada uno responde con un número de versión, vas bien.
+
+---
+
+## ⚠️ Nota crítica para Windows + PowerShell (LÉELA)
+
+En muchas instalaciones de Windows, PowerShell **bloquea la ejecución de `npm`** con un error
+como _"no se puede cargar el archivo npm.ps1 porque la ejecución de scripts está deshabilitada"_.
+
+Tienes dos formas de resolverlo (elige una):
+
+**Opción 1 — Usar `npm.cmd` en vez de `npm` (rápido, no cambia nada del sistema).**
+Cada vez que la guía diga `npm ...`, escribe `npm.cmd ...`. Ejemplo: `npm.cmd install`.
+
+**Opción 2 — Desbloquear scripts para tu usuario (una sola vez).**
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+Después de esto, `npm` normal ya funciona. (Esta guía usa `npm.cmd` por seguridad.)
+
+---
+
+## 🏠 1. Arranque paso a paso (unos 5–10 minutos)
+
+Necesitarás **TRES terminales** abiertas al final: base de datos, backend y frontend.
+
+### Paso A — Descargar el código
+
+```powershell
+git clone https://github.com/Scrum-2-tech/SST-SAAS.git
+cd SST-SAAS
+```
+
+### Paso B — Levantar la base de datos (Docker)
+
+1. Abre **Docker Desktop** y espera a que diga _"Engine running"_.
+2. Desde la raíz del proyecto (`SST-SAAS/`):
+   ```powershell
    docker compose up -d
    ```
+   Esto crea el contenedor de PostgreSQL `sst_postgres_container` escuchando en el puerto `5432`.
+3. Verifica que está arriba:
+   ```powershell
+   docker ps
+   ```
 
-### Paso B: Reconstruir y Encender el Backend (FastAPI)
-1. Abre una terminal dentro de la carpeta `backend/`:
-   ```bash
-   cd backend
-   ```
-2. Crea el entorno virtual de Python e instala todas las dependencias acumuladas en un solo golpe con `uv`:
-   ```bash
-   uv venv
-   uv pip install fastapi uvicorn "python-jose[cryptography]" bcrypt pydantic-settings "psycopg[binary]" sqlalchemy aiofiles email-validator
-   ```
-3. **Sincronizar la Base de Datos vacía de tu casa:** Ejecuta esta línea para inyectar las tablas limpias dentro del Docker:
-   ```bash
-   uv run python -c "from src.database import engine, Base; from src import models; Base.metadata.create_all(engine)"
-   ```
-4. Enciende el servidor del backend en modo desarrollo:
-   ```bash
-   uv run uvicorn src.main:app --reload
-   ```
-   *(Deja esta terminal abierta. Estará escuchando en el puerto 8000).*
+### Paso C — Configurar y encender el BACKEND (FastAPI)
 
-### Paso C: Reconstruir y Encender el Frontend (Angular + Tailwind v4)
-1. **Abre una segunda terminal nueva** de Windows, ubícate en la raíz del proyecto y entra a la carpeta del cliente visual:
-   ```bash
-   cd C:\Ruta\A\Tu\SST-SAAS\frontend
+Abre una terminal **dentro de la carpeta `backend/`**:
+
+```powershell
+cd backend
+```
+
+1. **Crear el archivo `.env`** copiando el ejemplo:
+
+   ```powershell
+   Copy-Item .env.example .env
    ```
-2. Descarga e instala los paquetes de Node locales y el compilador de Tailwind v4:
-   ```bash
-   npm install
+
+   (Los valores por defecto ya coinciden con la base de datos de Docker; no hay que tocar nada en local.)
+
+2. **Crear el entorno virtual e instalar dependencias:**
+
+   ```powershell
+   python -m venv .venv
+   .venv\Scripts\Activate.ps1
+   pip install -r requirements.txt
    ```
-3. Enciende el servidor visual de Angular:
-   ```bash
-   npm start
+
+   > Si `Activate.ps1` da error de permisos, usa la Opción 2 de la nota de PowerShell de arriba,
+   > o activa con: `.venv\Scripts\activate.bat`
+
+3. **Crear las tablas en la base de datos** (la BD de Docker arranca vacía):
+
+   ```powershell
+   python -c "from src.database import engine, Base; import src.models; Base.metadata.create_all(engine); print('Tablas creadas')"
    ```
-4. Abre tu navegador e ingresa a: 👉 **http://localhost:4200**
+
+   Esto crea las 7 tablas: `users`, `companies`, `folders`, `files`, `audit_logs`,
+   `sst_audits`, `sst_findings`.
+
+4. **Encender el servidor del backend:**
+   ```powershell
+   python -m uvicorn src.main:app --reload
+   ```
+   Déjalo corriendo. Escucha en **http://localhost:8000**.
+   La documentación interactiva de la API queda en **http://localhost:8000/docs**.
+
+### Paso D — Encender el FRONTEND (React + Vite)
+
+Abre una **tercera terminal**, en la carpeta `frontend/`:
+
+```powershell
+cd frontend
+```
+
+1. **Instalar dependencias de Node:**
+   ```powershell
+   npm.cmd install
+   ```
+2. **Encender el servidor visual:**
+   ```powershell
+   npm.cmd run dev
+   ```
+3. Abre el navegador en 👉 **http://localhost:4200**
+
+> El frontend corre en el puerto **4200** a propósito: el backend solo permite
+> conexiones (CORS) desde esa dirección. No lo cambies sin ajustar el backend.
+
+### Paso E — Crear el primer usuario
+
+No hay usuarios por defecto (la BD arranca vacía). En la pantalla de login:
+
+1. Clic en **"Regístrate"**.
+2. Crea un usuario con correo y una contraseña segura (mín. 8 caracteres, con mayúscula,
+   minúscula, número y símbolo). El sistema lo registra como rol **Gestor**.
+3. Inicia sesión con ese usuario.
 
 ---
 
-## 🧭 2. Guion de Demostración para el Comprador (Flujo de Pruebas)
+## 🧭 2. Guion de demostración (qué mostrar y qué decir)
 
-Sigue este orden exacto en la pantalla para deslumbrar a la persona a la que le vas a vender el software:
+Sigue este orden en pantalla:
 
-1. **Registro Seguro:** Entra a `/register` y crea un usuario de prueba. Explica que el sistema hashea las contraseñas con el algoritmo industrial `bcrypt` y fuerza el rol de **Gestor SST** para evitar vulnerabilidades.
-2. **Inicio de Sesión (JWT):** Inicia sesión. Explica que el sistema genera un token de seguridad JWT de alta duración que se almacena de forma segura en la memoria viva (*Signals de Angular 22*), haciéndola inmune a bloqueos de privacidad del navegador.
-3. **Módulo Multi-Tenant en Caliente:** Abre el selector superior, crea la empresa (*Ej: Constructora Horizonte S.A.S.* con su NIT). Muestra cómo Angular cambia el portafolio instantáneamente e inyecta la cabecera `X-Company-Id` de forma invisible sin tener que cerrar sesión.
-4. **Nube Documental SST:** Crea una carpeta (*Ej: "Exámenes Médicos Ocupacionales"*), sube un archivo PDF real, marca su nivel de criticidad (Ley 1562) y ponle una fecha de vencimiento. Muestra los **badges automáticos de colores**: Verde (Vigente), Naranja (Por Vencer) o Rojo (Vencido).
-5. **Descarga en Bloques (Streaming Chunks):** Descarga el archivo. Explica que el backend lee el PDF en fragmentos asíncronos (`aiofiles`) y lo entrega como un `Blob` de datos dinámico. La ruta física en el disco duro está oculta; nadie puede adivinar la URL para hackear los documentos de salud o matrices de riesgos.
-6. **Historial de Auditoría Legal:** Haz clic en la barra lateral e ingresa al historial. Muestra la tabla detallada donde queda registrado qué usuario, a qué hora, sobre qué empresa y desde qué **dirección IP exacta** se manipuló el documento. Esto blinda jurídicamente a la empresa ante inspecciones del Ministerio del Trabajo.
+1. **Registro seguro.** Crea una cuenta. Las contraseñas se guardan cifradas con **bcrypt**
+   (nunca en texto plano) y el rol se fuerza a _Gestor_ por seguridad.
+2. **Inicio de sesión (JWT).** Al entrar, el sistema emite un **token JWT** que autentica
+   cada petición al backend.
+3. **Guía de inicio.** Entra a la sección **"Guía de inicio"**: explica paso a paso qué hace
+   cada módulo. Útil para alguien que empieza en SST.
+4. **Multi-empresa (multi-tenant).** En **Empresas**, crea una empresa (razón social + NIT).
+   El selector superior permite cambiar de empresa activa al instante; el sistema envía
+   la cabecera `X-Company-Id` de forma invisible para aislar los datos de cada empresa.
+5. **Estructura guía SST.** En **Carpetas**, usa el botón **"Crear estructura guía SST"**:
+   genera de un clic las 36 carpetas estándar del SG-SST según la **Resolución 0312 de 2019**
+   (ciclo PHVA). Esto diferencia el producto: le ahorra días de trabajo al cliente.
+6. **Nube documental con control de vencimientos.** En **Archivos**, sube un PDF, ponle fecha
+   de vencimiento y márcalo como **"Exigido por ley"**. Muestra los badges automáticos:
+   Vigente (verde), Por Vencer (ámbar), Vencido (rojo). Usa los filtros por estado.
+7. **Dashboard.** Muestra el resumen: total de documentos, vigentes, por vencer, vencidos,
+   exigidos por ley, y las alertas de vencimiento.
+8. **Auditorías SST.** En **Auditorías SST**, crea una auditoría interna, registra hallazgos
+   (conformidad / no conformidad mayor-menor / observación), con plan de acción y responsable.
+   Este es el módulo de negocio propio de SST (Decreto 1072 de 2015).
+9. **Trazabilidad.** En **Trazabilidad**, muestra el registro técnico: qué usuario hizo qué,
+   cuándo y desde qué IP. Blinda jurídicamente ante inspecciones del Ministerio del Trabajo.
+   _(Esta sección y Auditorías SST solo son visibles para Gestor/SuperAdmin.)_
 
 ---
 
-## 🏢 3. Guía de Despliegue en la Nube (Pasos para subirlo a internet)
+## 🔐 3. Roles del sistema
 
-Para que tu cliente y sus empresas aliadas puedan entrar a la aplicación desde cualquier parte del mundo usando internet, se deben contratar y acoplar los siguientes servicios en la nube:
+| Rol                 | Qué puede hacer                                                                                                            |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **SuperAdmin**      | Control global: ve todas las empresas del sistema.                                                                         |
+| **Gestor**          | Dueño de su portafolio: crea empresas, sube documentos, gestiona auditorías y ve la trazabilidad. Es el cliente principal. |
+| **Vista_Auditoria** | Solo lectura del portafolio de UNA empresa. NO ve la trazabilidad ni gestiona auditorías.                                  |
 
-### 🗄️ A. Servidor de Base de Datos (PostgreSQL)
-* **Proveedor Recomendado:** *Supabase* o *Railway* (Tienen planes gratuitos iniciales).
-* **Acción:** Creas una cuenta, obtienes la cadena de conexión de producción y la colocas en el archivo `.env` del servidor. Las tablas se autogenerarán solas gracias al script de inicialización.
+El control de roles está aplicado **en el backend** (devuelve 403 si no hay permiso) y
+**en el frontend** (oculta los menús restringidos según el rol).
 
-### ⚙️ B. Servidor de Cómputo (Backend en FastAPI)
-* **Proveedor Recomendado:** *Render* o *Railway* (Plan básico de \$5 a \$7 USD al mes).
-* **Acción:** Vinculas tu cuenta de GitHub/GitLab. El servidor detectará el backend, instalará las dependencias de Python y levantará el servicio de Uvicorn automáticamente en la nube. Las variables confidenciales del `.env` se escriben en el panel de control del proveedor para máxima seguridad.
+---
 
-### 💾 C. Almacenamiento en la Nube para los PDFs (Storage)
-* **Estado Actual:** El backend guarda los archivos directamente en el almacenamiento local del servidor en la ruta `./storage/`.
-* **Escalamiento Comercial:** Si tu cliente empieza a subir gigabytes de archivos pesados, simplemente se configura el archivo `.env` para desviar las subidas por fragmentos de forma directa hacia **Amazon S3** o **Google Cloud Storage**, pagando centavos de dólar por almacenamiento masivo sin saturar la memoria RAM ni el disco de tu servidor principal.
+## 🛑 4. Cómo apagar todo
 
-### 🎨 D. Servidor Web para la Interfaz Gráfica (Angular)
-* **Proveedor Recomendado:** *Vercel* o *Netlify* (Completamente **Gratis** para aplicaciones Angular frontend).
-* **Acción:** En tu consola local ejecutas el comando `ng build`. Esto generará una carpeta llamada `dist/frontend`. Subes esa carpeta a Vercel, y el sistema distribuirá tus pantallas de Tailwind v4 a través de una red global (CDN), haciendo que cargue instantáneamente en cualquier celular o PC.
-* **Dominio:** Compras un dominio web (ej: `tu-plataformasst.com`) en GoDaddy o Namecheap y lo enlazas a Vercel con un par de clics para darle la cara comercial definitiva a tu negocio.
+- En las terminales del backend y frontend: `Ctrl + C`.
+- Para apagar la base de datos (sin borrar los datos):
+  ```powershell
+  docker compose stop
+  ```
+- Para apagarla y **borrar** el contenedor (los datos persisten en el volumen):
+  ```powershell
+  docker compose down
+  ```
+
+---
+
+## 🧯 5. Solución de problemas comunes
+
+| Problema                                              | Causa / Solución                                                                     |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `npm.ps1 ... ejecución de scripts está deshabilitada` | Usa `npm.cmd` o aplica `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.        |
+| `Port 4200 is already in use`                         | Ya hay un Vite corriendo. Ciérralo o libera el puerto.                               |
+| El frontend carga pero no trae datos / errores de red | El backend no está arriba, o no en el puerto 8000. Revisa la terminal del backend.   |
+| `connection refused` / el backend no conecta a la BD  | Docker no está corriendo o el contenedor está apagado. Corre `docker compose up -d`. |
+| `.venv\Scripts\Activate.ps1` da error de permisos     | Usa `.venv\Scripts\activate.bat` o desbloquea scripts (Opción 2).                    |
+| Olvidé la contraseña de un usuario                    | No se puede recuperar (está cifrada). Crea otro usuario o resetea el hash en la BD.  |
+
+---
+
+## 🏢 6. Despliegue en la nube (más adelante, NO para la demo)
+
+> La demo de mañana corre **en local**, que es lo más confiable. Esta sección es la hoja de
+> ruta para cuando se decida publicarlo en internet. Requiere crear cuentas y, en algunos
+> casos, pagar planes básicos.
+
+- **Base de datos:** PostgreSQL gestionado en _Supabase_, _Neon_ o _Railway_ (tienen plan gratis inicial).
+- **Backend (FastAPI):** _Render_ o _Railway_. Se conecta al repositorio Git y se despliega solo;
+  las variables del `.env` se cargan en el panel del proveedor. Hay que ajustar el CORS para el
+  dominio real del frontend.
+- **Almacenamiento de archivos:** hoy es en disco local (`backend/storage/`). En la mayoría de
+  hostings el disco **se borra en cada redeploy**, así que para producción hay que migrar a
+  **Amazon S3** / **Google Cloud Storage** (trabajo adicional).
+- **Frontend (React/Vite):** _Vercel_ o _Netlify_ (gratis). Se hace `npm run build` y se publica
+  la carpeta `dist/`. Hay que apuntar la URL del backend de producción en `src/api/client.js`.
+
+---
+
+## 📁 7. Estructura del proyecto
+
+```
+SST-SAAS/
+├─ backend/                 # API FastAPI
+│  ├─ src/
+│  │  ├─ main.py            # App y registro de routers
+│  │  ├─ models.py          # Modelos de BD (SQLAlchemy)
+│  │  ├─ schemas.py         # Validación (Pydantic)
+│  │  ├─ database.py        # Conexión a PostgreSQL
+│  │  ├─ security.py        # Hashing + JWT
+│  │  ├─ dependencies.py    # Auth y multi-tenant
+│  │  └─ routers/           # Endpoints (auth, companies, folders, files, audit, sst_audits)
+│  ├─ requirements.txt      # Dependencias Python
+│  └─ .env.example          # Plantilla de variables de entorno
+├─ frontend/                # App React + Vite + Tailwind
+│  ├─ src/
+│  │  ├─ pages/             # Pantallas (Login, Dashboard, Companies, Folders, Files, SstAudits, Audit, Guide)
+│  │  ├─ components/        # Layout y componentes de UI
+│  │  ├─ context/           # AuthContext (sesión y rol)
+│  │  ├─ api/               # Cliente axios y endpoints
+│  │  └─ data/              # Plantilla de carpetas SST
+│  └─ .env.example
+├─ docs/                    # Documentación funcional del proyecto
+├─ docker-compose.yml       # Base de datos PostgreSQL
+├─ ARQUITECTURA.md          # Diagrama de arquitectura (Mermaid)
+└─ guia.md                  # Este archivo
+```

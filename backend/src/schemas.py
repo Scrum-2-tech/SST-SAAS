@@ -18,7 +18,13 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from src.models import FileStatus, UserRole
+from src.models import (
+    FileStatus,
+    FindingStatus,
+    FindingType,
+    SstAuditStatus,
+    UserRole,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -163,3 +169,85 @@ class AuditLogOut(BaseModel):
     details: Optional[str]
     ip_address: Optional[str]
     timestamp: datetime
+
+
+# ---------------------------------------------------------------------------
+# Auditorías internas del SG-SST (negocio de SST)
+# ---------------------------------------------------------------------------
+class SstFindingCreate(BaseModel):
+    """Datos para registrar un hallazgo dentro de una auditoría."""
+
+    description: str = Field(..., min_length=1)
+    finding_type: FindingType = FindingType.OBSERVACION
+    action_plan: Optional[str] = None
+    responsible: Optional[str] = Field(default=None, max_length=255)
+    due_date: Optional[date] = None
+    status: FindingStatus = FindingStatus.ABIERTO
+
+
+class SstFindingUpdate(BaseModel):
+    """Campos editables de un hallazgo (todos opcionales)."""
+
+    description: Optional[str] = Field(default=None, min_length=1)
+    finding_type: Optional[FindingType] = None
+    action_plan: Optional[str] = None
+    responsible: Optional[str] = Field(default=None, max_length=255)
+    due_date: Optional[date] = None
+    status: Optional[FindingStatus] = None
+
+
+class SstFindingOut(BaseModel):
+    """Representación pública de un hallazgo."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    audit_id: uuid.UUID
+    description: str
+    finding_type: FindingType
+    action_plan: Optional[str]
+    responsible: Optional[str]
+    due_date: Optional[date]
+    status: FindingStatus
+    created_at: datetime
+
+
+class SstAuditCreate(BaseModel):
+    """Datos para crear una auditoría interna del SG-SST."""
+
+    title: str = Field(..., min_length=1, max_length=255)
+    scope: Optional[str] = None
+    auditor: Optional[str] = Field(default=None, max_length=255)
+    scheduled_date: Optional[date] = None
+    status: SstAuditStatus = SstAuditStatus.PLANIFICADA
+
+
+class SstAuditUpdate(BaseModel):
+    """Campos editables de una auditoría (todos opcionales)."""
+
+    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    scope: Optional[str] = None
+    auditor: Optional[str] = Field(default=None, max_length=255)
+    scheduled_date: Optional[date] = None
+    status: Optional[SstAuditStatus] = None
+
+
+class SstAuditOut(BaseModel):
+    """Representación de una auditoría SIN sus hallazgos (para listados)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    company_id: uuid.UUID
+    title: str
+    scope: Optional[str]
+    auditor: Optional[str]
+    scheduled_date: Optional[date]
+    status: SstAuditStatus
+    created_at: datetime
+
+
+class SstAuditDetailOut(SstAuditOut):
+    """Auditoría con la lista completa de sus hallazgos (para el detalle)."""
+
+    findings: list[SstFindingOut] = Field(default_factory=list)

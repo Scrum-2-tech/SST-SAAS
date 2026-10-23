@@ -1,0 +1,24 @@
+# Dependencias del backend SST SaaS (FastAPI).
+# Versiones fijadas a las probadas en desarrollo para instalación reproducible.
+#
+# Instalación con pip (entorno virtual estándar):
+#   python -m venv .venv
+#   .venv\Scripts\activate      (Windows)   |   source .venv/bin/activate (Linux/Mac)
+#   pip install -r requirements.txt
+#
+# Instalación con uv (más rápido, opcional):
+#   uv venv
+#   uv pip install -r requirements.txt
+
+fastapi==0.143.0
+uvicorn==0.54.0
+sqlalchemy==2.1.4
+psycopg[binary]==3.3.6
+pydantic==2.14.0
+pydantic-settings==2.15.0
+python-jose[cryptography]==3.5.0
+bcrypt==5.0.0
+aiofiles==25.1.0
+email-validator==2.3.0
+python-multipart==0.0.32
+python-dotenv==1.2.4
