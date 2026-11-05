@@ -68,6 +68,14 @@ EXTENSIONES_PERMITIDAS: dict[str, set[str]] = {
 CHUNK_SIZE = 1024 * 1024
 
 
+def _guard_gestion(current_user: User) -> None:
+    if current_user.role == UserRole.VISTA_AUDITORIA:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tiene permiso para acceder a la gestión de archivos.",
+        )
+
+
 @router.post(
     "/upload",
     response_model=FileOut,
@@ -89,6 +97,8 @@ async def subir_archivo(
     El archivo se guarda en './{STORAGE_PATH}/{company_id}/{uuid}.ext'. El
     nombre original se conserva en BD para mostrarlo en la interfaz.
     """
+    _guard_gestion(current_user)
+
     # --- 1. Validar la extensión y el content-type (lista blanca) ---
     nombre_original = file.filename or "archivo"
     extension = Path(nombre_original).suffix.lower()
@@ -185,6 +195,7 @@ async def subir_archivo(
     summary="Listar los archivos de la empresa activa",
 )
 def listar_archivos(
+    current_user: User = Depends(get_current_user),
     tenant: Company = Depends(get_current_tenant),
     db: Session = Depends(get_db),
 ) -> list[File]:
@@ -194,6 +205,7 @@ def listar_archivos(
     el header X-Company-Id), por lo que es imposible ver archivos de otra
     empresa aunque se manipule la petición.
     """
+    _guard_gestion(current_user)
     archivos = db.scalars(
         select(File).where(File.company_id == tenant.id)
     ).all()
@@ -221,6 +233,8 @@ def descargar_archivo(
         4. Devolver el archivo con FileResponse, usando el nombre ORIGINAL
            para que el navegador lo descargue con un nombre legible.
     """
+    _guard_gestion(current_user)
+
     # --- 1. Buscar y validar pertenencia al tenant ---
     archivo = db.get(File, file_id)
     if archivo is None or archivo.company_id != tenant.id:
@@ -274,18 +288,13 @@ def eliminar_archivo(
 
     Puntos clave:
         - Aislamiento: el archivo debe pertenecer al tenant activo (si no -> 404).
-        - Permisos: Vista_Auditoria es solo lectura y NO puede borrar (-> 403).
+        - Permisos: solo Gestor y SuperAdmin pueden acceder a la gestión de archivos (-> 403).
         - Orden seguro: se borra PRIMERO el registro en BD (con commit) y DESPUÉS
           el fichero en disco. Si el disco fallara, el peor caso es un huérfano
           recuperable, nunca un registro apuntando a un archivo inexistente.
         - Trazabilidad: se registra AuditLog "ELIMINAR_ARCHIVO".
     """
-    # --- Permisos: Vista_Auditoria no puede borrar ---
-    if current_user.role == UserRole.VISTA_AUDITORIA:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tiene permiso para eliminar archivos.",
-        )
+    _guard_gestion(current_user)
 
     # --- Aislamiento: el archivo debe ser del tenant activo ---
     archivo = db.get(File, file_id)

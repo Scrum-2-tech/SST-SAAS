@@ -16,20 +16,29 @@ Blindaje multi-tenant (reglas críticas de los docs 06 y 02):
 
 from __future__ import annotations
 
+import json
 import os
 import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.database import get_db
 from src.dependencies import get_current_tenant, get_current_user
-from src.models import AuditLog, Company, File, Folder, User, UserRole
-from src.schemas import FolderCreate, FolderOut, FolderTreeOut
+from src.models import AuditLog, Company, File, Folder, SstAudit, User, UserRole
+from src.schemas import FileOut, FolderCreate, FolderOut, FolderTreeOut, FolderUpdate
 
 router = APIRouter(prefix="/folders", tags=["Carpetas"])
+
+
+def _guard_gestion(current_user: User) -> None:
+    if current_user.role == UserRole.VISTA_AUDITORIA:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tiene permiso para acceder a las carpetas.",
+        )
 
 
 @router.post(
@@ -40,6 +49,7 @@ router = APIRouter(prefix="/folders", tags=["Carpetas"])
 )
 def crear_carpeta(
     payload: FolderCreate,
+    current_user: User = Depends(get_current_user),
     tenant: Company = Depends(get_current_tenant),
     db: Session = Depends(get_db),
 ) -> Folder:
@@ -49,6 +59,8 @@ def crear_carpeta(
     pertenezca al mismo tenant (aislamiento). El company_id se fuerza al del
     tenant resuelto.
     """
+    _guard_gestion(current_user)
+
     # Si es subcarpeta, validar que el padre sea del tenant activo.
     if payload.parent_id is not None:
         padre = db.get(Folder, payload.parent_id)
@@ -75,6 +87,7 @@ def crear_carpeta(
     summary="Listar el árbol de carpetas de la empresa activa",
 )
 def listar_arbol_carpetas(
+    current_user: User = Depends(get_current_user),
     tenant: Company = Depends(get_current_tenant),
     db: Session = Depends(get_db),
 ) -> list[FolderTreeOut]:
@@ -84,6 +97,8 @@ def listar_arbol_carpetas(
     y el árbol se arma en memoria (evita N consultas recursivas a la BD). Las
     carpetas raíz son las que tienen parent_id = NULL.
     """
+    _guard_gestion(current_user)
+
     # Una sola consulta, filtrada estrictamente por el tenant activo.
     carpetas = db.scalars(
         select(Folder).where(Folder.company_id == tenant.id)
@@ -97,6 +112,24 @@ def listar_arbol_carpetas(
         nodos[carpeta.id] = FolderTreeOut.model_validate(carpeta)
         hijos_por_padre.setdefault(carpeta.parent_id, []).append(carpeta)
 
+    conteos_archivos = dict(
+        db.execute(
+            select(File.folder_id, func.count(File.id))
+            .where(File.company_id == tenant.id, File.folder_id.is_not(None))
+            .group_by(File.folder_id)
+        ).all()
+    )
+    conteos_auditorias = dict(
+        db.execute(
+            select(SstAudit.folder_id, func.count(SstAudit.id))
+            .where(SstAudit.company_id == tenant.id, SstAudit.folder_id.is_not(None))
+            .group_by(SstAudit.folder_id)
+        ).all()
+    )
+    for folder_id, nodo in nodos.items():
+        nodo.file_count = conteos_archivos.get(folder_id, 0)
+        nodo.audit_count = conteos_auditorias.get(folder_id, 0)
+
     # Ensamblar el árbol conectando cada nodo con sus hijos.
     for carpeta in carpetas:
         nodo = nodos[carpeta.id]
@@ -109,6 +142,80 @@ def listar_arbol_carpetas(
         nodos[carpeta.id] for carpeta in hijos_por_padre.get(None, [])
     ]
     return raices
+
+
+@router.put(
+    "/{folder_id}",
+    response_model=FolderOut,
+    summary="Actualizar el nombre o las notas JSON de una carpeta",
+)
+def actualizar_carpeta(
+    folder_id: uuid.UUID,
+    payload: FolderUpdate,
+    request: Request,
+    tenant: Company = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Folder:
+    _guard_gestion(current_user)
+    carpeta = db.get(Folder, folder_id)
+    if carpeta is None or carpeta.company_id != tenant.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="La carpeta no existe en este portafolio.",
+        )
+
+    cambios = payload.model_dump(exclude_unset=True)
+    if "notes" in cambios and cambios["notes"] not in (None, ""):
+        try:
+            json.loads(cambios["notes"])
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Las notas deben contener JSON válido.",
+            ) from exc
+
+    for campo, valor in cambios.items():
+        setattr(carpeta, campo, valor or None if campo == "notes" else valor)
+    db.add(
+        AuditLog(
+            user_id=current_user.id,
+            company_id=tenant.id,
+            action="ACTUALIZAR_CARPETA",
+            details=f"Carpeta '{carpeta.name}' actualizada.",
+            ip_address=request.client.host if request.client else None,
+        )
+    )
+    db.commit()
+    db.refresh(carpeta)
+    return carpeta
+
+
+@router.get(
+    "/{folder_id}/files",
+    response_model=list[FileOut],
+    summary="Listar los archivos de una carpeta",
+)
+def listar_archivos_carpeta(
+    folder_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    tenant: Company = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> list[File]:
+    _guard_gestion(current_user)
+    carpeta = db.get(Folder, folder_id)
+    if carpeta is None or carpeta.company_id != tenant.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="La carpeta no existe en este portafolio.",
+        )
+    return list(
+        db.scalars(
+            select(File)
+            .where(File.folder_id == folder_id, File.company_id == tenant.id)
+            .order_by(File.uploaded_at.desc())
+        ).all()
+    )
 
 
 
@@ -128,19 +235,14 @@ def eliminar_carpeta(
 
     Puntos clave:
         - Aislamiento: la carpeta debe pertenecer al tenant activo (si no -> 404).
-        - Permisos: Vista_Auditoria es solo lectura y NO puede borrar (-> 403).
+        - Permisos: solo Gestor y SuperAdmin pueden gestionar carpetas (-> 403).
         - Limpieza de disco: el cascade de SQLAlchemy borra los registros File
           en BD, pero NO los ficheros físicos. Por eso recolectamos las rutas
           de todos los archivos bajo la carpeta (recursivamente) ANTES de
           borrar, y los eliminamos del disco DESPUÉS del commit.
         - Trazabilidad: se registra AuditLog "ELIMINAR_CARPETA".
     """
-    # --- Permisos: Vista_Auditoria no puede borrar ---
-    if current_user.role == UserRole.VISTA_AUDITORIA:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tiene permiso para eliminar carpetas.",
-        )
+    _guard_gestion(current_user)
 
     # --- Aislamiento: la carpeta debe ser del tenant activo ---
     carpeta = db.get(Folder, folder_id)

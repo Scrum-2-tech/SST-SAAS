@@ -109,6 +109,13 @@ class FolderCreate(BaseModel):
     parent_id: Optional[uuid.UUID] = None
 
 
+class FolderUpdate(BaseModel):
+    """Campos editables de una carpeta."""
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    notes: Optional[str] = None
+
+
 class FolderOut(BaseModel):
     """Representación simple de una carpeta (nodo sin hijos)."""
 
@@ -116,6 +123,7 @@ class FolderOut(BaseModel):
 
     id: uuid.UUID
     name: str
+    notes: Optional[str] = None
     parent_id: Optional[uuid.UUID]
     company_id: uuid.UUID
     created_at: datetime
@@ -129,6 +137,8 @@ class FolderTreeOut(FolderOut):
     """
 
     children: list["FolderTreeOut"] = Field(default_factory=list)
+    file_count: int = 0
+    audit_count: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +174,7 @@ class AuditLogOut(BaseModel):
 
     id: uuid.UUID
     user_id: Optional[uuid.UUID]
+    user_email: Optional[EmailStr] = None
     company_id: uuid.UUID
     action: str
     details: Optional[str]
@@ -212,6 +223,26 @@ class SstFindingOut(BaseModel):
     created_at: datetime
 
 
+class SstAuditChecklistItemCreate(BaseModel):
+    label: str = Field(..., min_length=1)
+    completed: bool = False
+
+
+class SstAuditChecklistItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    audit_id: uuid.UUID
+    label: str
+    completed: bool
+    position: int
+    created_at: datetime
+
+
+class SstAuditChecklistUpdate(BaseModel):
+    items: list[SstAuditChecklistItemCreate]
+
+
 class SstAuditCreate(BaseModel):
     """Datos para crear una auditoría interna del SG-SST."""
 
@@ -219,6 +250,10 @@ class SstAuditCreate(BaseModel):
     scope: Optional[str] = None
     auditor: Optional[str] = Field(default=None, max_length=255)
     scheduled_date: Optional[date] = None
+    folder_id: Optional[uuid.UUID] = None
+    follow_up_date: Optional[date] = None
+    observations: Optional[str] = None
+    checklist_items: list[SstAuditChecklistItemCreate] = Field(default_factory=list)
     status: SstAuditStatus = SstAuditStatus.PLANIFICADA
 
 
@@ -229,6 +264,9 @@ class SstAuditUpdate(BaseModel):
     scope: Optional[str] = None
     auditor: Optional[str] = Field(default=None, max_length=255)
     scheduled_date: Optional[date] = None
+    folder_id: Optional[uuid.UUID] = None
+    follow_up_date: Optional[date] = None
+    observations: Optional[str] = None
     status: Optional[SstAuditStatus] = None
 
 
@@ -243,6 +281,12 @@ class SstAuditOut(BaseModel):
     scope: Optional[str]
     auditor: Optional[str]
     scheduled_date: Optional[date]
+    folder_id: Optional[uuid.UUID]
+    follow_up_date: Optional[date]
+    observations: Optional[str]
+    observations_updated_at: Optional[datetime]
+    observations_updated_by_id: Optional[uuid.UUID]
+    observations_author_email: Optional[EmailStr] = None
     status: SstAuditStatus
     created_at: datetime
 
@@ -251,3 +295,4 @@ class SstAuditDetailOut(SstAuditOut):
     """Auditoría con la lista completa de sus hallazgos (para el detalle)."""
 
     findings: list[SstFindingOut] = Field(default_factory=list)
+    checklist_items: list[SstAuditChecklistItemOut] = Field(default_factory=list)

@@ -252,6 +252,7 @@ class Folder(Base):
         index=True,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     parent_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("folders.id", ondelete="CASCADE"),
@@ -404,6 +405,10 @@ class AuditLog(Base):
     user: Mapped[Optional["User"]] = relationship(back_populates="audit_logs")
     company: Mapped["Company"] = relationship(back_populates="audit_logs")
 
+    @property
+    def user_email(self) -> Optional[str]:
+        return self.user.email if self.user else None
+
     def __repr__(self) -> str:
         return f"<AuditLog id={self.id} action={self.action!r} user_id={self.user_id}>"
 
@@ -439,6 +444,22 @@ class SstAudit(Base):
     scope: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # alcance
     auditor: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     scheduled_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    folder_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("folders.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    follow_up_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    observations: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    observations_updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    observations_updated_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     status: Mapped[SstAuditStatus] = mapped_column(
         SAEnum(SstAuditStatus, name="sst_audit_status_enum"),
         nullable=False,
@@ -452,13 +473,54 @@ class SstAudit(Base):
 
     # Relaciones.
     company: Mapped["Company"] = relationship()
+    folder: Mapped[Optional["Folder"]] = relationship()
+    observations_updated_by: Mapped[Optional["User"]] = relationship(
+        foreign_keys=[observations_updated_by_id]
+    )
     findings: Mapped[list["SstFinding"]] = relationship(
         back_populates="audit",
         cascade="all, delete-orphan",
     )
+    checklist_items: Mapped[list["SstAuditChecklistItem"]] = relationship(
+        back_populates="audit",
+        cascade="all, delete-orphan",
+        order_by="SstAuditChecklistItem.position",
+    )
+
+    @property
+    def observations_author_email(self) -> Optional[str]:
+        return self.observations_updated_by.email if self.observations_updated_by else None
 
     def __repr__(self) -> str:
         return f"<SstAudit id={self.id} title={self.title!r} status={self.status.value}>"
+
+
+class SstAuditChecklistItem(Base):
+    """Checklist de verificación asociado a una auditoría interna."""
+
+    __tablename__ = "sst_audit_checklist_items"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    audit_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("sst_audits.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    label: Mapped[str] = mapped_column(Text, nullable=False)
+    completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    position: Mapped[int] = mapped_column(nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    audit: Mapped["SstAudit"] = relationship(back_populates="checklist_items")
 
 
 # ---------------------------------------------------------------------------
