@@ -1,6 +1,6 @@
 # 🚀 SST SaaS — Guía de Arranque y Presentación
 
-Manual completo para levantar el proyecto **desde cero en una máquina limpia** (Windows),
+Manual completo para levantar el proyecto **desde cero en una máquina limpia** (Linux o Windows),
 probarlo y presentarlo. Pensado para que cualquiera del equipo lo encienda sin ayuda.
 
 > **Stack real del proyecto**
@@ -39,6 +39,54 @@ python --version
 ```
 
 Si cada uno responde con un número de versión, vas bien.
+
+---
+
+## 🐧 Arranque en Linux (Ubuntu / Pop!_OS)
+
+Instala Git, Python con `venv`, Node.js LTS, Docker Engine y el plugin Compose:
+
+```bash
+sudo apt update
+sudo apt install -y git curl python3 python3-venv python3-pip nodejs npm docker.io docker-compose-plugin
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"
+```
+
+Después de agregar el usuario al grupo `docker`, cierra la sesión e ingresa de nuevo.
+Verifica `git --version`, `python3 --version`, `node --version`, `npm --version`,
+`docker --version` y `docker compose version`.
+
+Desde la raíz del repositorio:
+
+```bash
+docker compose up -d
+cp backend/.env.example backend/.env
+python3 -m venv backend/.venv
+cd backend
+source .venv/bin/activate
+pip install -r requirements.txt
+python -c "from src.database import engine, Base; import src.models; Base.metadata.create_all(engine); print('Tablas creadas')"
+cd ..
+docker compose exec -T postgres_db psql -v ON_ERROR_STOP=1 -U postgres -d sst_db < backend/migrations/001_folder_notes_audit_checklist.sql
+cd frontend
+npm install
+npm run dev
+```
+
+En otra terminal, desde `backend/`, activa `.venv` y ejecuta:
+
+```bash
+source .venv/bin/activate
+python -m uvicorn src.main:app --reload
+```
+
+La API queda en `http://localhost:8000` y la aplicación en `http://localhost:4200`.
+La migración SQL es idempotente y se debe ejecutar una vez al actualizar una base existente;
+`Base.metadata.create_all()` crea tablas nuevas, pero no agrega columnas a tablas existentes.
+En instalaciones Linux sin `python3-venv`, instala ese paquete del sistema antes de crear
+el entorno virtual. Si Compose o Docker requiere privilegios, ajusta la instalación del
+sistema; no ejecutes la aplicación como root.
 
 ---
 
@@ -119,8 +167,16 @@ cd backend
    python -c "from src.database import engine, Base; import src.models; Base.metadata.create_all(engine); print('Tablas creadas')"
    ```
 
-   Esto crea las 7 tablas: `users`, `companies`, `folders`, `files`, `audit_logs`,
-   `sst_audits`, `sst_findings`.
+   Esto crea las tablas de usuarios, empresas, carpetas, archivos, trazabilidad,
+   auditorías, checklist y hallazgos.
+   Para actualizar una base existente, vuelve a la raíz del proyecto y aplica también:
+
+   ```powershell
+   cd ..
+   Get-Content backend/migrations/001_folder_notes_audit_checklist.sql -Raw |
+     docker compose exec -T postgres_db psql -v ON_ERROR_STOP=1 -U postgres -d sst_db
+   cd backend
+   ```
 
 4. **Encender el servidor del backend:**
    ```powershell
@@ -175,16 +231,16 @@ Sigue este orden en pantalla:
    El selector superior permite cambiar de empresa activa al instante; el sistema envía
    la cabecera `X-Company-Id` de forma invisible para aislar los datos de cada empresa.
 5. **Estructura guía SST.** En **Carpetas**, usa el botón **"Crear estructura guía SST"**:
-   genera de un clic las 36 carpetas estándar del SG-SST según la **Resolución 0312 de 2019**
-   (ciclo PHVA). Esto diferencia el producto: le ahorra días de trabajo al cliente.
-6. **Nube documental con control de vencimientos.** En **Archivos**, sube un PDF, ponle fecha
-   de vencimiento y márcalo como **"Exigido por ley"**. Muestra los badges automáticos:
-   Vigente (verde), Por Vencer (ámbar), Vencido (rojo). Usa los filtros por estado.
+   genera las carpetas estándar del SG-SST según la **Resolución 0312 de 2019**.
+   El botón **Deshacer estructura guía** revierte la generación durante esa sesión.
+6. **Nube documental.** Sube y consulta documentos desde la carpeta correspondiente,
+   define su fecha de vencimiento y marca los exigidos por ley. La sección **Archivos**
+   permanece como vista secundaria.
 7. **Dashboard.** Muestra el resumen: total de documentos, vigentes, por vencer, vencidos,
    exigidos por ley, y las alertas de vencimiento.
-8. **Auditorías SST.** En **Auditorías SST**, crea una auditoría interna, registra hallazgos
-   (conformidad / no conformidad mayor-menor / observación), con plan de acción y responsable.
-   Este es el módulo de negocio propio de SST (Decreto 1072 de 2015).
+8. **Auditorías SST.** En **Auditorías SST**, crea una auditoría interna, asóciala a una
+   carpeta, completa el checklist, define las fechas de realización y seguimiento, y registra
+   hallazgos, planes de acción y salvedades.
 9. **Trazabilidad.** En **Trazabilidad**, muestra el registro técnico: qué usuario hizo qué,
    cuándo y desde qué IP. Blinda jurídicamente ante inspecciones del Ministerio del Trabajo.
    _(Esta sección y Auditorías SST solo son visibles para Gestor/SuperAdmin.)_
@@ -195,12 +251,24 @@ Sigue este orden en pantalla:
 
 | Rol                 | Qué puede hacer                                                                                                            |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| **SuperAdmin**      | Control global: ve todas las empresas del sistema.                                                                         |
-| **Gestor**          | Dueño de su portafolio: crea empresas, sube documentos, gestiona auditorías y ve la trazabilidad. Es el cliente principal. |
-| **Vista_Auditoria** | Solo lectura del portafolio de UNA empresa. NO ve la trazabilidad ni gestiona auditorías.                                  |
+| **SuperAdmin**      | Control global: ve todas las empresas, administra la estructura, los documentos, las auditorías y la trazabilidad. |
+| **Gestor**          | Dueño de su portafolio: crea empresas y carpetas, sube documentos, gestiona auditorías y consulta la trazabilidad. |
+| **Vista_Auditoria** | Solo ve el Dashboard estadístico, la Guía y los datos de su empresa. No accede a carpetas, archivos, auditorías ni trazabilidad. |
+
+Las notas JSON pertenecen a la gestión de carpetas y, por tanto, solo están disponibles
+para Gestor y SuperAdmin.
 
 El control de roles está aplicado **en el backend** (devuelve 403 si no hay permiso) y
 **en el frontend** (oculta los menús restringidos según el rol).
+
+### Flujo recomendado de trabajo
+
+- **Onboarding del Gestor:** registro → crear la primera empresa → generar la estructura SST
+  → subir documentos obligatorios en sus carpetas → revisar el Dashboard.
+- **Auditoría:** crear auditoría → asociar carpeta → completar el checklist → registrar hallazgos
+  y planes de acción → revisar las fechas de seguimiento en el Dashboard.
+- **Vista_Auditoria:** consultar únicamente las métricas, vencimientos y resúmenes disponibles
+  en el Dashboard; la gestión queda a cargo del Gestor.
 
 ---
 
