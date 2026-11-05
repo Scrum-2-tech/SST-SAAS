@@ -9,6 +9,7 @@ import {
   Check,
   X,
   CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { register as apiRegister } from "../api/endpoints.js";
@@ -34,9 +35,10 @@ export default function Login() {
   const strength = evaluatePassword(password);
   const passwordOk = isPasswordValid(password);
   const confirmOk = confirm.length > 0 && confirm === password;
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   const canSubmitRegister =
-    email.length > 0 && passwordOk && confirmOk && acceptedTerms;
+    emailOk && passwordOk && confirmOk && acceptedTerms;
 
   function resetSecondaryFields() {
     setConfirm("");
@@ -48,6 +50,16 @@ export default function Login() {
     e.preventDefault();
     setError("");
     setInfo("");
+
+    if (!emailOk) {
+      setError("Ingresa un correo electrónico válido.");
+      return;
+    }
+
+    if (mode === "login" && password.length < 8) {
+      setError("La contraseña debe tener al menos 8 caracteres.");
+      return;
+    }
 
     if (mode === "register") {
       if (!passwordOk) {
@@ -154,10 +166,17 @@ export default function Login() {
               label="Correo electrónico"
               type="email"
               required
+              autoComplete="email"
+              pattern="[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]{2,}"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="gestor@empresa.com"
             />
+            {email.length > 0 && !emailOk && (
+              <p className="-mt-3 text-xs text-red-600">
+                Ingresa un correo electrónico válido.
+              </p>
+            )}
 
             {/* Contraseña con botón de ver/ocultar */}
             <div>
@@ -168,6 +187,8 @@ export default function Login() {
                 <input
                   type={showPass ? "text" : "password"}
                   required
+                  minLength={8}
+                  autoComplete={mode === "login" ? "current-password" : "new-password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={
@@ -190,6 +211,11 @@ export default function Login() {
                   )}
                 </button>
               </div>
+              {mode === "login" && password.length > 0 && password.length < 8 && (
+                <p className="mt-1 text-xs text-red-600">
+                  La contraseña debe tener al menos 8 caracteres.
+                </p>
+              )}
 
               {/* Medidor de fortaleza (solo en registro) */}
               {mode === "register" && password.length > 0 && (
@@ -276,18 +302,28 @@ export default function Login() {
             <Button
               type="submit"
               disabled={
-                loading || (mode === "register" && !canSubmitRegister)
+                loading ||
+                (mode === "register" && !canSubmitRegister) ||
+                (mode === "login" && (!emailOk || password.length < 8))
               }
               className="w-full"
             >
               {mode === "login" ? (
                 <>
-                  <LogIn className="h-4 w-4" />
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <LogIn className="h-4 w-4" />
+                  )}
                   {loading ? "Ingresando..." : "Iniciar sesión"}
                 </>
               ) : (
                 <>
-                  <UserPlus className="h-4 w-4" />
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <UserPlus className="h-4 w-4" />
+                  )}
                   {loading ? "Creando..." : "Crear cuenta de Gestor"}
                 </>
               )}

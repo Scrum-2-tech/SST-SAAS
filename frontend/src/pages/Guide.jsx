@@ -14,6 +14,7 @@ import {
   ClipboardCheck,
 } from "lucide-react";
 import { Card } from "../components/ui.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 
 const steps = [
   {
@@ -31,14 +32,16 @@ const steps = [
     desc: "Usa la plantilla guía del SG-SST (Res. 0312 de 2019) para crear de un clic todas las carpetas típicas, o crea las tuyas propias con subcarpetas ilimitadas.",
     to: "/carpetas",
     cta: "Ir a Carpetas",
+    manage: true,
   },
   {
     icon: FileText,
     color: "bg-emerald-100 text-emerald-600",
     title: "3. Sube tus documentos",
-    desc: "Carga PDF, imágenes, Word o Excel. Define fecha de vencimiento y marca los documentos exigidos por ley para no perderlos de vista.",
-    to: "/archivos",
-    cta: "Ir a Archivos",
+    desc: "Sube PDF, imágenes, Word o Excel desde su carpeta. Define fecha de vencimiento y marca los documentos exigidos por ley.",
+    to: "/carpetas",
+    cta: "Ir a Carpetas",
+    manage: true,
   },
   {
     icon: LayoutDashboard,
@@ -55,6 +58,7 @@ const steps = [
     desc: "Registra las auditorías internas del SG-SST, documenta hallazgos (conformidades y no conformidades) y haz seguimiento a los planes de acción.",
     to: "/auditorias-sst",
     cta: "Ir a Auditorías SST",
+    manage: true,
   },
   {
     icon: History,
@@ -63,6 +67,7 @@ const steps = [
     desc: "Toda subida, descarga o eliminación queda registrada con usuario, fecha e IP. Ideal para demostrar control ante una visita de inspección.",
     to: "/trazabilidad",
     cta: "Ir a Trazabilidad",
+    manage: true,
   },
 ];
 
@@ -98,6 +103,9 @@ const statusGuide = [
 ];
 
 export default function Guide() {
+  const { canManage } = useAuth();
+  const visibleSteps = steps.filter((step) => !step.manage || canManage);
+
   return (
     <div className="space-y-6">
       {/* Encabezado */}
@@ -123,10 +131,11 @@ export default function Guide() {
           ¿Por dónde empiezo?
         </h2>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {steps.map((step) => (
-            <div
+          {visibleSteps.map((step) => (
+            <Link
+              to={step.to}
               key={step.title}
-              className="flex flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+              className="group flex flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand-300 motion-reduce:transform-none"
             >
               <div
                 className={`mb-3 flex h-11 w-11 items-center justify-center rounded-xl ${step.color}`}
@@ -135,17 +144,29 @@ export default function Guide() {
               </div>
               <h3 className="font-semibold text-slate-800">{step.title}</h3>
               <p className="mt-1 flex-1 text-sm text-slate-500">{step.desc}</p>
-              <Link
-                to={step.to}
-                className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-700"
-              >
+              <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-brand-600 group-hover:text-brand-700">
                 {step.cta}
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </span>
+            </Link>
           ))}
         </div>
       </div>
+
+      {canManage && (
+        <div className="rounded-xl border border-rose-100 bg-rose-50 p-5 text-sm text-rose-800">
+          <p className="font-semibold">Auditoría SST: donde está el texto, está el checklist para auditar.</p>
+          <p className="mt-1 text-rose-700">
+            Registra la salvedad y completa los puntos de verificación para mantener el seguimiento documentado.
+          </p>
+          <Link
+            to="/auditorias-sst"
+            className="mt-3 inline-flex items-center gap-1 font-medium text-rose-700 hover:text-rose-900"
+          >
+            Abrir auditorías SST <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      )}
 
       {/* Semáforo de estados */}
       <Card title="Cómo leer el estado de los documentos">

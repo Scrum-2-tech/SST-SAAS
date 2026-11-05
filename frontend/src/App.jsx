@@ -9,10 +9,13 @@ import Folders from "./pages/Folders.jsx";
 import Audit from "./pages/Audit.jsx";
 import Guide from "./pages/Guide.jsx";
 import SstAudits from "./pages/SstAudits.jsx";
+import { Spinner } from "./components/ui.jsx";
 
 function ProtectedRoute({ children }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loadingUser, user } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (loadingUser) return <Spinner label="Verificando permisos..." />;
+  if (!user) return <Navigate to="/login" replace />;
   return children;
 }
 
@@ -22,6 +25,12 @@ function ManageRoute({ children }) {
   const { canManage, user } = useAuth();
   // Mientras aún no se conoce el rol (user null), no bloquea para evitar
   // parpadeos; el backend igual rechaza con 403 si no hay permiso.
+  if (user && !canManage) return <Navigate to="/" replace />;
+  return children;
+}
+
+function ManagerRoute({ children }) {
+  const { canManage, user } = useAuth();
   if (user && !canManage) return <Navigate to="/" replace />;
   return children;
 }
@@ -46,8 +55,22 @@ export default function App() {
         <Route index element={<Dashboard />} />
         <Route path="guia" element={<Guide />} />
         <Route path="empresas" element={<Companies />} />
-        <Route path="carpetas" element={<Folders />} />
-        <Route path="archivos" element={<Files />} />
+        <Route
+          path="carpetas"
+          element={
+            <ManagerRoute>
+              <Folders />
+            </ManagerRoute>
+          }
+        />
+        <Route
+          path="archivos"
+          element={
+            <ManagerRoute>
+              <Files />
+            </ManagerRoute>
+          }
+        />
         <Route
           path="auditorias-sst"
           element={

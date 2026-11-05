@@ -46,6 +46,16 @@ export async function createFolder(payload) {
   return data;
 }
 
+export async function updateFolder(folderId, payload) {
+  const { data } = await client.put(`/folders/${folderId}`, payload);
+  return data;
+}
+
+export async function listFolderFiles(folderId) {
+  const { data } = await client.get(`/folders/${folderId}/files`);
+  return data;
+}
+
 export async function deleteFolder(folderId) {
   await client.delete(`/folders/${folderId}`);
 }
@@ -56,13 +66,26 @@ export async function listFiles() {
   return data;
 }
 
-export async function uploadFile({ file, folderId, isCritical, expirationDate }) {
+export async function uploadFile({
+  file,
+  folderId,
+  isCritical,
+  expirationDate,
+  onUploadProgress,
+}) {
   const form = new FormData();
   form.append("file", file);
   if (folderId) form.append("folder_id", folderId);
   form.append("is_critical", isCritical ? "true" : "false");
   if (expirationDate) form.append("expiration_date", expirationDate);
-  const { data } = await client.post("/files/upload", form);
+  const { data } = await client.post("/files/upload", form, {
+    onUploadProgress,
+  });
+  return data;
+}
+
+export async function getPortfolioReport() {
+  const { data } = await client.get("/reports/summary");
   return data;
 }
 
@@ -103,6 +126,11 @@ export async function updateSstAudit(auditId, payload) {
 
 export async function deleteSstAudit(auditId) {
   await client.delete(`/sst-audits/${auditId}`);
+}
+
+export async function updateAuditChecklist(auditId, items) {
+  const { data } = await client.put(`/sst-audits/${auditId}/checklist`, { items });
+  return data;
 }
 
 export async function createFinding(auditId, payload) {

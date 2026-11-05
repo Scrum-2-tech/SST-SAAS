@@ -16,22 +16,33 @@ export function AuthProvider({ children }) {
   const [companies, setCompanies] = useState([]);
   const [loadingCompanies, setLoadingCompanies] = useState(false);
   const [user, setUser] = useState(null); // { id, email, role, ... }
+  const [loadingUser, setLoadingUser] = useState(Boolean(token));
 
   const isAuthenticated = Boolean(token);
   const role = user?.role || null;
   // Permiso de gestión: ver trazabilidad y gestionar auditorías SST.
   // Coincide con la regla del backend (Gestor y SuperAdmin, no Vista_Auditoria).
   const canManage = role === "Gestor" || role === "SuperAdmin";
+  const isViewer = role === "Vista_Auditoria";
 
   // Al autenticarse, carga el portafolio de empresas y selecciona una
   // por defecto si aún no hay tenant activo.
-  async function refreshCompanies() {
+  async function refreshCompanies(roleOverride) {
     if (!localStorage.getItem(TOKEN_KEY)) return [];
     setLoadingCompanies(true);
     try {
       const data = await listCompanies();
       setCompanies(data);
-      if (!localStorage.getItem(COMPANY_KEY) && data.length > 0) {
+      const currentRole = roleOverride || user?.role;
+      const currentCompanyId = localStorage.getItem(COMPANY_KEY);
+      if (data.length === 0) {
+        setCompanyId(null);
+      } else if (currentRole === "Vista_Auditoria") {
+        setCompanyId(data[0]?.id || null);
+      } else if (
+        data.length > 0 &&
+        !data.some((company) => company.id === currentCompanyId)
+      ) {
         setCompanyId(data[0].id);
       }
       return data;
@@ -49,18 +60,31 @@ export function AuthProvider({ children }) {
       return me;
     } catch {
       return null;
+    } finally {
+      setLoadingUser(false);
     }
   }
 
   useEffect(() => {
-    if (token) {
-      refreshUser();
-      refreshCompanies();
+    let active = true;
+    async function loadSession() {
+      if (!token) {
+        setLoadingUser(false);
+        return;
+      }
+      setLoadingUser(true);
+      const currentUser = await refreshUser();
+      if (active) await refreshCompanies(currentUser?.role);
     }
+    loadSession();
+    return () => {
+      active = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   function setCompanyId(id) {
+    if (isViewer && id && id !== companies[0]?.id) return;
     if (id) {
       localStorage.setItem(COMPANY_KEY, id);
     } else {
@@ -72,6 +96,8 @@ export function AuthProvider({ children }) {
   async function login(email, password) {
     const { access_token } = await apiLogin(email, password);
     localStorage.setItem(TOKEN_KEY, access_token);
+    setLoadingUser(true);
+    setUser(null);
     setToken(access_token);
     return access_token;
   }
@@ -83,6 +109,7 @@ export function AuthProvider({ children }) {
     setCompanyIdState(null);
     setCompanies([]);
     setUser(null);
+    setLoadingUser(false);
   }
 
   const activeCompany =
@@ -100,6 +127,8 @@ export function AuthProvider({ children }) {
         companyId,
         activeCompany,
         loadingCompanies,
+        loadingUser,
+        isViewer,
         login,
         logout,
         setCompanyId,

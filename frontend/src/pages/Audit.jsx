@@ -9,6 +9,8 @@ const actionColors = {
   DESCARGAR: "bg-brand-100 text-brand-600",
   ELIMINAR_ARCHIVO: "bg-red-100 text-red-700",
   ELIMINAR_CARPETA: "bg-red-100 text-red-700",
+  CREAR_SALVEDAD: "bg-amber-100 text-amber-700",
+  ACTUALIZAR_SALVEDAD: "bg-amber-100 text-amber-700",
 };
 
 export default function Audit() {
@@ -61,6 +63,7 @@ export default function Audit() {
               <thead>
                 <tr className="text-left text-xs font-medium uppercase text-slate-400">
                   <th className="px-3 py-2">Acción</th>
+                  <th className="px-3 py-2">Usuario</th>
                   <th className="px-3 py-2">Detalle</th>
                   <th className="px-3 py-2">IP</th>
                   <th className="px-3 py-2">Fecha</th>
@@ -77,6 +80,9 @@ export default function Audit() {
                       >
                         {log.action}
                       </span>
+                    </td>
+                    <td className="px-3 py-3 text-slate-600">
+                      {log.user_email || "Usuario eliminado"}
                     </td>
                     <td className="px-3 py-3 text-slate-600">
                       {log.details || "—"}

@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Building2,
@@ -32,12 +32,18 @@ export default function Layout() {
     activeCompany,
     logout,
     canManage,
+    isViewer,
     user,
   } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   // Oculta las secciones de gestión a los roles sin permiso (Vista_Auditoria).
-  const visibleNav = navItems.filter((item) => !item.manage || canManage);
+  const visibleNav = navItems.filter(
+    (item) =>
+      (!item.manage || canManage) &&
+      (!isViewer || ["/", "/guia", "/empresas"].includes(item.to))
+  );
 
   function handleLogout() {
     logout();
@@ -103,31 +109,42 @@ export default function Layout() {
           <h1 className="text-sm font-medium text-slate-500">
             Portafolio documental SST
           </h1>
-          <div className="flex items-center gap-3">
-            <label className="text-xs text-slate-400">Empresa activa</label>
-            <select
-              value={companyId || ""}
-              onChange={(e) => setCompanyId(e.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-            >
-              {companies.length === 0 && (
-                <option value="">Sin empresas</option>
-              )}
-              {companies.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {isViewer ? (
+            <p className="text-sm text-slate-600">
+              Empresa: {activeCompany?.name || "Sin empresa asignada"}
+            </p>
+          ) : (
+            <div className="flex items-center gap-3">
+              <label className="text-xs text-slate-400">Empresa activa</label>
+              <select
+                value={companyId || ""}
+                onChange={(e) => setCompanyId(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+              >
+                {companies.length === 0 && (
+                  <option value="">Sin empresas</option>
+                )}
+                {companies.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </header>
 
         <main className="flex-1 overflow-y-auto p-6">
-          {!activeCompany && companies.length === 0 ? (
+          {!activeCompany && companies.length === 0 && pathname !== "/empresas" ? (
             <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-500">
               No tienes empresas en tu portafolio todavía. Ve a{" "}
-              <span className="font-semibold text-brand-600">Empresas</span> y
-              crea la primera para empezar.
+              <NavLink
+                to="/empresas"
+                className="font-semibold text-brand-600 hover:underline"
+              >
+                Empresas
+              </NavLink>{" "}
+              y crea la primera para empezar.
             </div>
           ) : (
             <Outlet />

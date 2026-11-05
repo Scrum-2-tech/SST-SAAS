@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   ClipboardList,
+  Save,
 } from "lucide-react";
 import {
   listSstAudits,
@@ -17,6 +18,8 @@ import {
   createFinding,
   updateFinding,
   deleteFinding,
+  listFolderTree,
+  updateAuditChecklist,
 } from "../api/endpoints.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import {
@@ -37,6 +40,22 @@ const FINDING_TYPES = [
   "Oportunidad de Mejora",
 ];
 const FINDING_STATUS = ["Abierto", "En Progreso", "Cerrado"];
+const AUDIT_CHECKLIST = [
+  "¿Se cumple la Resolución 0312 de 2019?",
+  "¿Se realizan y registran las capacitaciones del SG-SST?",
+  "¿Los equipos de protección personal están disponibles y vigentes?",
+  "¿La matriz de peligros y valoración de riesgos está actualizada?",
+  "¿Se investigan los incidentes y accidentes de trabajo?",
+  "¿Se ejecuta el plan anual de trabajo del SG-SST?",
+];
+
+function flattenFolders(tree, depth = 0, items = []) {
+  for (const folder of tree) {
+    items.push({ id: folder.id, name: folder.name, depth });
+    flattenFolders(folder.children || [], depth + 1, items);
+  }
+  return items;
+}
 
 const auditStatusStyle = {
   Planificada: "bg-slate-100 text-slate-600",
@@ -94,6 +113,9 @@ function AuditDetail({ auditId, onBack, onChanged }) {
   const [responsible, setResponsible] = useState("");
   const [due, setDue] = useState("");
   const [saving, setSaving] = useState(false);
+  const [observations, setObservations] = useState("");
+  const [savingObservations, setSavingObservations] = useState(false);
+  const [savingChecklist, setSavingChecklist] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,6 +123,7 @@ function AuditDetail({ auditId, onBack, onChanged }) {
     try {
       const data = await getSstAudit(auditId);
       setAudit(data);
+      setObservations(data.observations || "");
     } catch (err) {
       setError(parseApiError(err));
     } finally {
@@ -169,6 +192,37 @@ function AuditDetail({ auditId, onBack, onChanged }) {
     }
   }
 
+  async function handleSaveObservations() {
+    setSavingObservations(true);
+    setError("");
+    try {
+      await updateSstAudit(auditId, { observations: observations || null });
+      await load();
+      onChanged?.();
+    } catch (err) {
+      setError(parseApiError(err));
+    } finally {
+      setSavingObservations(false);
+    }
+  }
+
+  async function handleChecklistChange(index, completed) {
+    setSavingChecklist(true);
+    setError("");
+    try {
+      const items = audit.checklist_items.map((item, itemIndex) => ({
+        label: item.label,
+        completed: itemIndex === index ? completed : item.completed,
+      }));
+      await updateAuditChecklist(auditId, items);
+      await load();
+    } catch (err) {
+      setError(parseApiError(err));
+    } finally {
+      setSavingChecklist(false);
+    }
+  }
+
   if (loading) return <Spinner label="Cargando auditoría..." />;
   if (!audit) return <ErrorBanner message={error || "No encontrada"} />;
 
@@ -202,6 +256,12 @@ function AuditDetail({ auditId, onBack, onChanged }) {
                   {audit.scheduled_date || "—"}
                 </span>
               </span>
+              <span>
+                Seguimiento:{" "}
+                <span className="text-slate-700">
+                  {audit.follow_up_date || "—"}
+                </span>
+              </span>
             </div>
           </div>
           <Select
@@ -210,6 +270,61 @@ function AuditDetail({ auditId, onBack, onChanged }) {
             onChange={(e) => handleAuditStatus(e.target.value)}
             options={AUDIT_STATUS}
           />
+        </div>
+      </Card>
+
+      <Card title="Checklist de auditoría SG-SST">
+        {!audit.checklist_items?.length ? (
+          <p className="text-sm text-slate-500">
+            Esta auditoría no tiene puntos de checklist.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {audit.checklist_items.map((item, index) => (
+              <label
+                key={item.id}
+                className="flex items-start gap-3 rounded-lg border border-slate-100 p-3 text-sm text-slate-700"
+              >
+                <input
+                  type="checkbox"
+                  checked={item.completed}
+                  disabled={savingChecklist}
+                  onChange={(event) =>
+                    handleChecklistChange(index, event.target.checked)
+                  }
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                />
+                {item.label}
+              </label>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card title="Salvedad / observaciones">
+        <label className="block">
+          <span className="sr-only">Salvedad o notas aclaratorias</span>
+          <textarea
+            value={observations}
+            onChange={(event) => setObservations(event.target.value)}
+            rows={5}
+            placeholder="Registra notas aclaratorias, limitaciones o salvedades de la auditoría."
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+          />
+        </label>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-slate-500">
+            {audit.observations_updated_at
+              ? `Última actualización por ${audit.observations_author_email || "usuario"} · ${new Date(audit.observations_updated_at).toLocaleString()}`
+              : "Aún no se ha registrado una salvedad."}
+          </p>
+          <Button
+            onClick={handleSaveObservations}
+            disabled={savingObservations}
+          >
+            <Save className="h-4 w-4" />
+            {savingObservations ? "Guardando..." : "Guardar salvedad"}
+          </Button>
         </div>
       </Card>
 
@@ -360,6 +475,11 @@ export default function SstAudits() {
   const [auditor, setAuditor] = useState("");
   const [date, setDate] = useState("");
   const [status, setStatus] = useState("Planificada");
+  const [followUpDate, setFollowUpDate] = useState("");
+  const [folderId, setFolderId] = useState("");
+  const [observations, setObservations] = useState("");
+  const [checklistSelection, setChecklistSelection] = useState(AUDIT_CHECKLIST);
+  const [folders, setFolders] = useState([]);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -367,8 +487,9 @@ export default function SstAudits() {
     setLoading(true);
     setError("");
     try {
-      const data = await listSstAudits();
+      const [data, tree] = await Promise.all([listSstAudits(), listFolderTree()]);
       setAudits(data);
+      setFolders(flattenFolders(tree));
     } catch (err) {
       setError(parseApiError(err));
     } finally {
@@ -390,12 +511,23 @@ export default function SstAudits() {
         scope: scope || null,
         auditor: auditor || null,
         scheduled_date: date || null,
+        follow_up_date: followUpDate || null,
+        folder_id: folderId || null,
+        observations: observations || null,
+        checklist_items: checklistSelection.map((label) => ({
+          label,
+          completed: false,
+        })),
         status,
       });
       setTitle("");
       setScope("");
       setAuditor("");
       setDate("");
+      setFollowUpDate("");
+      setFolderId("");
+      setObservations("");
+      setChecklistSelection(AUDIT_CHECKLIST);
       setStatus("Planificada");
       await load();
     } catch (err) {
@@ -518,17 +650,74 @@ export default function SstAudits() {
                 placeholder="Nombre del auditor"
               />
               <Input
-                label="Fecha programada"
+                label="Fecha de realización"
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
               />
+              <Input
+                label="Fecha de seguimiento"
+                type="date"
+                value={followUpDate}
+                onChange={(e) => setFollowUpDate(e.target.value)}
+              />
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-slate-600">
+                  Carpeta asociada
+                </span>
+                <select
+                  value={folderId}
+                  onChange={(event) => setFolderId(event.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                >
+                  <option value="">Sin carpeta</option>
+                  {folders.map((folder) => (
+                    <option key={folder.id} value={folder.id}>
+                      {`${"— ".repeat(folder.depth)}${folder.name}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <Select
                 label="Estado"
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
                 options={AUDIT_STATUS}
               />
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-slate-600">
+                  Salvedad / observaciones
+                </span>
+                <textarea
+                  value={observations}
+                  onChange={(event) => setObservations(event.target.value)}
+                  rows={3}
+                  placeholder="Notas aclaratorias para esta auditoría"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                />
+              </label>
+              <fieldset className="space-y-2">
+                <legend className="mb-1 text-sm font-medium text-slate-600">
+                  Checklist inicial
+                </legend>
+                {AUDIT_CHECKLIST.map((item) => (
+                  <label key={item} className="flex items-start gap-2 text-xs text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={checklistSelection.includes(item)}
+                      onChange={(event) =>
+                        setChecklistSelection((current) =>
+                          event.target.checked
+                            ? [...current, item]
+                            : current.filter((value) => value !== item)
+                        )
+                      }
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    />
+                    {item}
+                  </label>
+                ))}
+              </fieldset>
               <Button type="submit" disabled={saving} className="w-full">
                 <Plus className="h-4 w-4" />
                 {saving ? "Creando..." : "Crear auditoría"}
@@ -574,9 +763,22 @@ export default function SstAudits() {
                       <p className="mt-0.5 text-xs text-slate-400">
                         {a.auditor ? `Auditor: ${a.auditor} · ` : ""}
                         {a.scheduled_date
-                          ? `Programada: ${a.scheduled_date}`
+                          ? `Realización: ${a.scheduled_date}`
                           : "Sin fecha"}
+                        {a.follow_up_date ? ` · Seguimiento: ${a.follow_up_date}` : ""}
                       </p>
+                      <div className="mt-1 flex flex-wrap gap-2">
+                        {a.observations && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                            Tiene salvedad
+                          </span>
+                        )}
+                        {a.folder_id && (
+                          <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                            Asociada a carpeta
+                          </span>
+                        )}
+                      </div>
                     </button>
                     <button
                       onClick={() => handleDelete(a)}

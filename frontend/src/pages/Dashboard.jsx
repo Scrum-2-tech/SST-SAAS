@@ -1,17 +1,24 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  FileText,
   AlertTriangle,
-  ShieldAlert,
+  ArrowRight,
+  BookOpen,
   CheckCircle2,
+  ClipboardCheck,
+  FileText,
   FolderTree,
   Scale,
-  BookOpen,
-  ArrowRight,
+  ShieldAlert,
 } from "lucide-react";
-import { listFiles, listFolderTree } from "../api/endpoints.js";
-import { Card, Spinner, ErrorBanner, StatusBadge, parseApiError } from "../components/ui.jsx";
+import { getPortfolioReport } from "../api/endpoints.js";
+import {
+  Card,
+  ErrorBanner,
+  Spinner,
+  StatusBadge,
+  parseApiError,
+} from "../components/ui.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 
 function Metric({ icon: Icon, label, value, accent }) {
@@ -30,35 +37,25 @@ function Metric({ icon: Icon, label, value, accent }) {
   );
 }
 
-function countFolders(tree) {
-  let total = 0;
-  for (const node of tree) {
-    total += 1 + countFolders(node.children || []);
-  }
-  return total;
-}
-
 export default function Dashboard() {
   const { activeCompany, companyId } = useAuth();
-  const [files, setFiles] = useState([]);
-  const [folderCount, setFolderCount] = useState(0);
+  const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      if (!companyId) return;
+      if (!companyId) {
+        setReport(null);
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setError("");
       try {
-        const [filesData, tree] = await Promise.all([
-          listFiles(),
-          listFolderTree(),
-        ]);
-        if (cancelled) return;
-        setFiles(filesData);
-        setFolderCount(countFolders(tree));
+        const data = await getPortfolioReport();
+        if (!cancelled) setReport(data);
       } catch (err) {
         if (!cancelled) setError(parseApiError(err));
       } finally {
@@ -71,23 +68,11 @@ export default function Dashboard() {
     };
   }, [companyId]);
 
-  const stats = useMemo(() => {
-    const vencidos = files.filter((f) => f.status === "Vencido").length;
-    const porVencer = files.filter((f) => f.status === "Por Vencer").length;
-    const vigentes = files.filter((f) => f.status === "Vigente").length;
-    const criticos = files.filter((f) => f.is_critical).length;
-    return { vencidos, porVencer, vigentes, criticos };
-  }, [files]);
-
-  const alertas = useMemo(
-    () =>
-      files
-        .filter((f) => f.status === "Vencido" || f.status === "Por Vencer")
-        .sort((a, b) => (a.expiration_date || "").localeCompare(b.expiration_date || "")),
-    [files]
-  );
-
   if (loading) return <Spinner label="Cargando métricas del portafolio..." />;
+
+  const documents = report?.documents;
+  const audits = report?.audits;
+  const expirations = report?.expirations || [];
 
   return (
     <div className="space-y-6">
@@ -97,7 +82,7 @@ export default function Dashboard() {
             {activeCompany ? activeCompany.name : "Dashboard"}
           </h1>
           <p className="text-sm text-slate-500">
-            Resumen del estado documental de la empresa activa.
+            Resumen estadístico de documentos, vencimientos y auditorías.
           </p>
         </div>
         <Link
@@ -105,88 +90,71 @@ export default function Dashboard() {
           className="inline-flex items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-100"
         >
           <BookOpen className="h-4 w-4" />
-          ¿Primera vez? Ver guía de inicio
+          Ver guía de inicio
           <ArrowRight className="h-4 w-4" />
         </Link>
       </div>
 
       <ErrorBanner message={error} />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric
-          icon={FileText}
-          label="Total de documentos"
-          value={files.length}
-          accent="bg-brand-100 text-brand-600"
-        />
-        <Metric
-          icon={CheckCircle2}
-          label="Vigentes"
-          value={stats.vigentes}
-          accent="bg-emerald-100 text-emerald-600"
-        />
-        <Metric
-          icon={AlertTriangle}
-          label="Por vencer (30 días)"
-          value={stats.porVencer}
-          accent="bg-amber-100 text-amber-600"
-        />
-        <Metric
-          icon={ShieldAlert}
-          label="Vencidos"
-          value={stats.vencidos}
-          accent="bg-red-100 text-red-600"
-        />
-      </div>
+      {documents && (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric icon={FileText} label="Total de documentos" value={documents.total} accent="bg-brand-100 text-brand-600" />
+            <Metric icon={CheckCircle2} label="Vigentes" value={documents.vigentes} accent="bg-emerald-100 text-emerald-600" />
+            <Metric icon={AlertTriangle} label="Por vencer (30 días)" value={documents.por_vencer} accent="bg-amber-100 text-amber-600" />
+            <Metric icon={ShieldAlert} label="Vencidos" value={documents.vencidos} accent="bg-red-100 text-red-600" />
+          </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <Card title="Alertas de vencimiento">
-            {alertas.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No hay documentos vencidos ni próximos a vencer. Todo en orden.
-              </p>
-            ) : (
-              <ul className="divide-y divide-slate-100">
-                {alertas.slice(0, 8).map((f) => (
-                  <li
-                    key={f.id}
-                    className="flex items-center justify-between py-3"
-                  >
-                    <div className="flex items-center gap-3">
-                      <FileText className="h-5 w-5 text-slate-400" />
-                      <div>
-                        <p className="text-sm font-medium text-slate-700">
-                          {f.name}
-                        </p>
-                        <p className="text-xs text-slate-400">
-                          Vence: {f.expiration_date || "—"}
-                        </p>
-                      </div>
-                    </div>
-                    <StatusBadge status={f.status} />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <Card title="Vencimientos próximos y vencidos">
+                {expirations.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    No hay documentos vencidos ni próximos a vencer.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-slate-100">
+                    {expirations.map((item, index) => (
+                      <li
+                        key={`${item.name}-${item.expiration_date}-${index}`}
+                        className="flex items-center justify-between gap-3 py-3"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <FileText className="h-5 w-5 shrink-0 text-slate-400" />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-slate-700">
+                              {item.name}
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              Vence: {item.expiration_date}
+                            </p>
+                          </div>
+                        </div>
+                        <StatusBadge status={item.status} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
+            </div>
 
-        <div className="space-y-4">
-          <Metric
-            icon={FolderTree}
-            label="Carpetas"
-            value={folderCount}
-            accent="bg-indigo-100 text-indigo-600"
-          />
-          <Metric
-            icon={Scale}
-            label="Exigidos por ley"
-            value={stats.criticos}
-            accent="bg-amber-100 text-amber-700"
-          />
-        </div>
-      </div>
+            <div className="space-y-4">
+              <Metric icon={FolderTree} label="Carpetas" value={report.folders} accent="bg-indigo-100 text-indigo-600" />
+              <Metric icon={Scale} label="Exigidos por ley" value={documents.criticos} accent="bg-amber-100 text-amber-700" />
+              <Card title="Auditorías SST">
+                <div className="flex items-center gap-3">
+                  <ClipboardCheck className="h-6 w-6 text-brand-600" />
+                  <div className="text-sm text-slate-600">
+                    <p>{audits?.total || 0} realizadas o registradas</p>
+                    <p>{audits?.proximas || 0} próximas · {audits?.vencidas || 0} vencidas</p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
