@@ -1,50 +1,98 @@
-# SST SaaS — Gestión documental de Seguridad y Salud en el Trabajo
+# SST SaaS
 
-Plataforma SaaS multi-tenant para que un Gestor SST administre el portafolio documental
-de varias empresas: carpetas, archivos con control de vencimiento, auditorías internas del
-SG-SST y trazabilidad de acciones.
+Aplicación para gestionar empresas, carpetas y documentos del SG-SST, auditorías internas y trazabilidad.
 
-## Stack
+## ¿Dónde está el código?
 
-- **Backend:** Python · FastAPI · SQLAlchemy 2.0
-- **Base de datos:** PostgreSQL (Docker)
-- **Frontend:** React 18 · Vite · Tailwind CSS
-- **Seguridad:** JWT (Bearer) · bcrypt · aislamiento multi-tenant por `X-Company-Id`
+El proyecto está organizado así:
 
-## Arranque rápido
+| Ruta | Contenido |
+| --- | --- |
+| `backend/` | API FastAPI, modelos, rutas y migraciones de base de datos. |
+| `frontend/` | Interfaz React/Vite. |
+| `backend/migrations/` | Migraciones SQL para bases de datos existentes. |
+| `guia.md` | Guía detallada de instalación, uso, demostración y solución de problemas. |
+| `ARQUITECTURA.md` y `docs/` | Arquitectura y documentación funcional. |
 
-Requisitos (máquina limpia): **Git, Docker Desktop, Node.js 18+, Python 3.11+**.
+En esta sesión de trabajo, el repositorio está en `/home/nicolasflorez/Documentos/copilot-worktrees/SST-SAAS/scrum-2-tech-silver-parakeet`. Si haces un clon normal, los archivos estarán dentro de la carpeta `SST-SAAS` que se cree donde ejecutes `git clone`.
+
+> **Importante sobre las mejoras:** los cambios de esta sesión están confirmados en la rama local `scrum-2-tech-sst-saas-improvements`, pero esa rama todavía no está publicada en GitHub. Un clon de GitHub por sí solo no incluye esos commits hasta que se publique la rama o se integren los cambios.
+
+## Requisitos
+
+- Git
+- Docker con el complemento `docker compose`
+- Python 3.11 o superior
+- Node.js 18 o superior (incluye npm)
+
+## Arranque local en Linux
+
+Clona el repositorio y entra en su carpeta:
 
 ```bash
 git clone https://github.com/Scrum-2-tech/SST-SAAS.git
 cd SST-SAAS
-
-# 1) Base de datos
-docker compose up -d
-
-# 2) Backend  (en backend/)
-cd backend
-copy .env.example .env            # Windows:  Copy-Item .env.example .env
-python -m venv .venv
-.venv\Scripts\activate            # Linux/Mac: source .venv/bin/activate
-pip install -r requirements.txt
-python -c "from src.database import engine, Base; import src.models; Base.metadata.create_all(engine)"
-python -m uvicorn src.main:app --reload
-
-# 3) Frontend  (en frontend/, otra terminal)
-cd frontend
-npm install                       # Windows con PowerShell bloqueado: npm.cmd install
-npm run dev                       # o: npm.cmd run dev
 ```
 
-- Frontend: http://localhost:4200
-- Backend / API docs: http://localhost:8000/docs
+Inicia PostgreSQL en Docker:
 
-## Documentación
+```bash
+docker compose up -d
+docker compose ps
+```
 
-- **[guia.md](./guia.md)** — Guía completa paso a paso (instalación desde cero, demo, troubleshooting).
-- **[ARQUITECTURA.md](./ARQUITECTURA.md)** — Diagramas de arquitectura, modelo de datos y flujos.
-- **[docs/](./docs/)** — Documentación funcional del proyecto.
+En la **primera terminal**, configura y arranca el backend:
 
-> Para una demostración, correr en local es lo más confiable. Ver la sección de despliegue
-> en la nube de `guia.md` para la hoja de ruta de publicación en internet.
+```bash
+cp backend/.env.example backend/.env
+python3 -m venv backend/.venv
+source backend/.venv/bin/activate
+cd backend
+pip install -r requirements.txt
+python -c "from src.database import engine, Base; import src.models; Base.metadata.create_all(engine); print('Tablas creadas')"
+cd ..
+docker compose exec -T postgres_db psql -v ON_ERROR_STOP=1 -U postgres -d sst_db < backend/migrations/001_folder_notes_audit_checklist.sql
+cd backend
+python -m uvicorn src.main:app --reload
+```
+
+En una **segunda terminal**, situada en la carpeta raíz del repositorio `SST-SAAS`, instala y arranca el frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Abre la aplicación en <http://localhost:4200>. La documentación interactiva de la API está en <http://localhost:8000/docs>.
+
+La primera vez, selecciona **Regístrate** en la aplicación para crear una cuenta Gestor y luego registra una empresa. La base local de PostgreSQL inicia vacía.
+
+## Siguientes veces
+
+Después de completar la configuración inicial, basta con iniciar Docker y los dos servidores:
+
+```bash
+docker compose up -d
+```
+
+Terminal backend:
+
+```bash
+cd backend
+source .venv/bin/activate
+python -m uvicorn src.main:app --reload
+```
+
+Terminal frontend:
+
+```bash
+cd frontend
+npm run dev
+```
+
+Para apagar PostgreSQL, ejecuta `docker compose down` desde la raíz del proyecto. Los datos se conservan en el volumen de Docker. Para borrar también esos datos de forma permanente se necesita `docker compose down -v`; úsalo solo si quieres reiniciar la base desde cero.
+
+## Windows
+
+Para Windows y PowerShell, sigue la guía completa en [guia.md](./guia.md), que incluye los comandos específicos de ese sistema y pasos de solución de problemas.
