@@ -18,7 +18,7 @@ Instala estos cuatro antes de empezar. Enlaces oficiales:
 
 | Programa              | Para qué                           | Dónde                                           |
 | --------------------- | ---------------------------------- | ----------------------------------------------- |
-| **Git**               | Descargar el código                | https://git-scm.com/downloads                   |
+| **Git**               | Descargar el código                | https://git-scm.com/downloads                   |ezcvn
 | **Docker Desktop**    | Correr la base de datos PostgreSQL | https://www.docker.com/products/docker-desktop/ |
 | **Node.js 18+ (LTS)** | Correr el frontend (incluye `npm`) | https://nodejs.org/                             |
 | **Python 3.11+**      | Correr el backend                  | https://www.python.org/downloads/               |
@@ -26,11 +26,11 @@ Instala estos cuatro antes de empezar. Enlaces oficiales:
 > Al instalar **Python**, marca la casilla **"Add Python to PATH"**.
 > Al instalar **Node.js**, deja todas las opciones por defecto.
 > Reinicia la terminal (o el PC) después de instalar, para que reconozca los comandos.
-
++
 ### Verifica que quedaron instalados
 
 Abre una terminal nueva (PowerShell) y corre:
-
++
 ```powershell
 git --version
 docker --version
@@ -66,7 +66,7 @@ python3 -m venv backend/.venv
 cd backend
 source .venv/bin/activate
 pip install -r requirements.txt
-python -c "from src.database import engine, Base; import src.models; Base.metadata.create_all(engine); print('Tablas creadas')"
+python3 -c "from src.database import engine, Base; import src.models; Base.metadata.create_all(engine); print('Tablas creadas')"
 cd ..
 docker compose exec -T postgres_db psql -v ON_ERROR_STOP=1 -U postgres -d sst_db < backend/migrations/001_folder_notes_audit_checklist.sql
 cd frontend
@@ -151,9 +151,9 @@ cd backend
    (Los valores por defecto ya coinciden con la base de datos de Docker; no hay que tocar nada en local.)
 
 2. **Crear el entorno virtual e instalar dependencias:**
-
+e
    ```powershell
-   python -m venv .venv
+   python3 -m venv .venv
    .venv\Scripts\Activate.ps1
    pip install -r requirements.txt
    ```
@@ -164,7 +164,7 @@ cd backend
 3. **Crear las tablas en la base de datos** (la BD de Docker arranca vacía):
 
    ```powershell
-   python -c "from src.database import engine, Base; import src.models; Base.metadata.create_all(engine); print('Tablas creadas')"
+   python3 -c "from src.database import engine, Base; import src.models; Base.metadata.create_all(engine); print('Tablas creadas')"
    ```
 
    Esto crea las tablas de usuarios, empresas, carpetas, archivos, trazabilidad,
@@ -180,7 +180,7 @@ cd backend
 
 4. **Encender el servidor del backend:**
    ```powershell
-   python -m uvicorn src.main:app --reload
+   python3 -m uvicorn src.main:app --reload
    ```
    Déjalo corriendo. Escucha en **http://localhost:8000**.
    La documentación interactiva de la API queda en **http://localhost:8000/docs**.
